@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using YampiOperationalAgent.Application.Abstractions;
 using YampiOperationalAgent.Infrastructure.Persistence;
+using YampiOperationalAgent.Infrastructure.Persistence.Repositories;
 
 namespace YampiOperationalAgent.Infrastructure.DependencyInjection;
 
@@ -21,6 +23,7 @@ public static class PersistenceServiceCollectionExtensions
         {
             options.UseNpgsql(connectionString);
         });
+        services.AddScoped<IPendingActionRepository, PendingActionRepository>();
 
         return services;
     }
