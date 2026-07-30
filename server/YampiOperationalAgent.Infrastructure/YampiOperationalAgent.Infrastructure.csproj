@@ -2,10 +2,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\YampiOperationalAgent.Application\YampiOperationalAgent.Application.csproj" />
+    <ProjectReference Include="..\YampiOperationalAgent.Domain\YampiOperationalAgent.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
   <PropertyGroup>
