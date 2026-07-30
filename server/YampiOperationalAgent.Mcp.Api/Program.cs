@@ -1,5 +1,6 @@
 using ModelContextProtocol.AspNetCore;
 using YampiOperationalAgent.Infrastructure.DependencyInjection;
+using YampiOperationalAgent.Mcp.Api.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,7 +10,8 @@ builder.Services
     .WithHttpTransport(options =>
     {
         options.Stateless = true;
-    });
+    })
+    .WithToolsFromAssembly(typeof(YampiSearchTools).Assembly);
 
 var app = builder.Build();
 
