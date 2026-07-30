@@ -26,6 +26,30 @@ internal sealed class YampiClient(
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<SkuSummaryDto>> SearchSkusAsync(string? query, CancellationToken cancellationToken)
+    {
+        var items = await GetPagedDataAsync(
+            $"{GetAlias()}/catalog/skus",
+            ["include=current_stock"],
+            cancellationToken);
+
+        IEnumerable<SkuSummaryDto> skus = items
+            .Select(DeserializeSku)
+            .OfType<YampiSkuResponse>()
+            .Select(MapSku);
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            skus = skus.Where(sku =>
+                sku.Sku.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || (sku.Title?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
+                || sku.Id.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)
+                || sku.ProductId.ToString().Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return skus.ToArray();
+    }
+
     public async Task<SkuPriceUpdateResultDto> UpdateSkuPriceAsync(
         long skuId,
         SkuPriceUpdateRequest request,
@@ -164,15 +188,7 @@ internal sealed class YampiClient(
 
     private async Task<SkuSummaryDto> GetSkuByIdAsync(long skuId, CancellationToken cancellationToken)
     {
-        var items = await GetPagedDataAsync(
-            $"{GetAlias()}/catalog/skus",
-            ["include=current_stock"],
-            cancellationToken);
-
-        var sku = items
-            .Select(DeserializeSku)
-            .OfType<YampiSkuResponse>()
-            .Select(MapSku)
+        var sku = (await SearchSkusAsync(skuId.ToString(), cancellationToken))
             .FirstOrDefault(item => item.Id == skuId);
 
         return sku ?? throw new InvalidOperationException($"SKU {skuId} was not found.");
