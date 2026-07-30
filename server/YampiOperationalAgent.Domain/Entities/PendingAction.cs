@@ -39,4 +39,41 @@ public sealed class PendingAction
     public string? FailureMessage { get; set; }
 
     public uint Version { get; set; }
+
+    public void MarkAsReplaced(Guid replacementId, DateTimeOffset now)
+    {
+        EnsurePendingConfirmationTransition("replaced");
+
+        Status = PendingActionStatus.Replaced;
+        ReplacedAtUtc = now;
+        ReplacedByActionId = replacementId;
+        UpdatedAtUtc = now;
+    }
+
+    public void Confirm(DateTimeOffset now)
+    {
+        EnsurePendingConfirmationTransition("confirmed");
+
+        Status = PendingActionStatus.Confirmed;
+        ConfirmedAtUtc = now;
+        UpdatedAtUtc = now;
+    }
+
+    public void Cancel(DateTimeOffset now)
+    {
+        EnsurePendingConfirmationTransition("canceled");
+
+        Status = PendingActionStatus.Canceled;
+        CanceledAtUtc = now;
+        UpdatedAtUtc = now;
+    }
+
+    private void EnsurePendingConfirmationTransition(string targetState)
+    {
+        if (Status != PendingActionStatus.PendingConfirmation)
+        {
+            throw new InvalidOperationException(
+                $"Pending action cannot be {targetState} when status is '{Status}'.");
+        }
+    }
 }
