@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="YampiOperationalAgent.Api/YampiOperationalAgent.Api.csproj" />
+  <Project Path="YampiOperationalAgent.Application/YampiOperationalAgent.Application.csproj" />
+  <Project Path="YampiOperationalAgent.Domain/YampiOperationalAgent.Domain.csproj" />
+  <Project Path="YampiOperationalAgent.Infrastructure/YampiOperationalAgent.Infrastructure.csproj" />
+  <Project Path="YampiOperationalAgent.Mcp.Api/YampiOperationalAgent.Mcp.Api.csproj" />
+  <Project Path="YampiOperationalAgent.Tests/YampiOperationalAgent.Tests.csproj" />
+</Solution>
