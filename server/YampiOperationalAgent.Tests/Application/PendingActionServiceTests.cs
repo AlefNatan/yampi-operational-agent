@@ -222,6 +222,187 @@ public sealed class PendingActionServiceTests
         Assert.Equal(0, repository.AddCallCount);
     }
 
+    [Fact]
+    public async Task BeginExecutionAsync_WhenActionIsConfirmed_TransitionsToExecuting()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Confirmed);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        var result = await service.BeginExecutionAsync(
+            pendingAction.ConversationId,
+            pendingAction.Id,
+            CancellationToken.None);
+
+        Assert.Equal(PendingActionStatus.Executing, result.Status);
+        Assert.Equal(FixedNow, result.UpdatedAtUtc);
+        Assert.Equal(1, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task BeginExecutionAsync_WhenActionIsPendingConfirmation_ThrowsInvalidTransitionException()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.PendingConfirmation);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await Assert.ThrowsAsync<PendingActionInvalidTransitionException>(() =>
+            service.BeginExecutionAsync(pendingAction.ConversationId, pendingAction.Id, CancellationToken.None));
+
+        Assert.Equal(PendingActionStatus.PendingConfirmation, pendingAction.Status);
+        Assert.Equal(0, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task BeginExecutionAsync_WhenCalledTwice_ThrowsInvalidTransitionException()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Confirmed);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await service.BeginExecutionAsync(pendingAction.ConversationId, pendingAction.Id, CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<PendingActionInvalidTransitionException>(() =>
+            service.BeginExecutionAsync(pendingAction.ConversationId, pendingAction.Id, CancellationToken.None));
+
+        Assert.Contains("begin execution", exception.Message);
+        Assert.Equal(PendingActionStatus.Executing, pendingAction.Status);
+        Assert.Equal(1, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task CompleteExecutionAsync_WhenActionIsExecuting_TransitionsToExecuted()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Executing);
+        pendingAction.FailureMessage = "temporary failure";
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        var result = await service.CompleteExecutionAsync(
+            pendingAction.ConversationId,
+            pendingAction.Id,
+            CancellationToken.None);
+
+        Assert.Equal(PendingActionStatus.Executed, result.Status);
+        Assert.Equal(FixedNow, result.ExecutedAtUtc);
+        Assert.Null(result.FailureMessage);
+        Assert.Equal(1, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task CompleteExecutionAsync_WhenCalledAfterExecution_ThrowsInvalidTransitionException()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Executed);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await Assert.ThrowsAsync<PendingActionInvalidTransitionException>(() =>
+            service.CompleteExecutionAsync(pendingAction.ConversationId, pendingAction.Id, CancellationToken.None));
+
+        Assert.Equal(PendingActionStatus.Executed, pendingAction.Status);
+        Assert.Equal(0, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task FailExecutionAsync_WhenActionIsExecuting_TransitionsToExecutionFailed()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Executing);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        var result = await service.FailExecutionAsync(
+            pendingAction.ConversationId,
+            pendingAction.Id,
+            "failure message",
+            CancellationToken.None);
+
+        Assert.Equal(PendingActionStatus.ExecutionFailed, result.Status);
+        Assert.Equal("failure message", result.FailureMessage);
+        Assert.Equal(FixedNow, result.UpdatedAtUtc);
+        Assert.Equal(1, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task FailExecutionAsync_WhenMessageIsEmpty_ThrowsArgumentException()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Executing);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.FailExecutionAsync(
+                pendingAction.ConversationId,
+                pendingAction.Id,
+                "   ",
+                CancellationToken.None));
+
+        Assert.Equal(PendingActionStatus.Executing, pendingAction.Status);
+        Assert.Equal(0, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task FailExecutionAsync_WhenMessageIsTooLong_TruncatesTo1000Characters()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Executing);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+        var longMessage = new string('x', 1200);
+
+        var result = await service.FailExecutionAsync(
+            pendingAction.ConversationId,
+            pendingAction.Id,
+            longMessage,
+            CancellationToken.None);
+
+        Assert.Equal(PendingActionStatus.ExecutionFailed, result.Status);
+        Assert.Equal(1000, result.FailureMessage?.Length);
+        Assert.Equal(1, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task BeginExecutionAsync_WhenConversationIsIncorrect_DoesNotChangeOrSave()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Confirmed, conversationId: "conversation-1");
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await Assert.ThrowsAsync<PendingActionNotFoundException>(() =>
+            service.BeginExecutionAsync("conversation-2", pendingAction.Id, CancellationToken.None));
+
+        Assert.Equal(PendingActionStatus.Confirmed, pendingAction.Status);
+        Assert.Equal(0, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task BeginExecutionAsync_WhenActionDoesNotExist_DoesNotSave()
+    {
+        var repository = new FakePendingActionRepository();
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await Assert.ThrowsAsync<PendingActionNotFoundException>(() =>
+            service.BeginExecutionAsync("conversation-1", Guid.NewGuid(), CancellationToken.None));
+
+        Assert.Equal(0, repository.SaveChangesCallCount);
+    }
+
+    [Fact]
+    public async Task FailExecutionAsync_WhenMessageIsEmpty_DoesNotSaveOrChangeStatus()
+    {
+        var pendingAction = CreatePendingAction(status: PendingActionStatus.Executing);
+        var repository = new FakePendingActionRepository(pendingAction);
+        var service = new PendingActionService(repository, new FakeTimeProvider(FixedNow));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.FailExecutionAsync(
+                pendingAction.ConversationId,
+                pendingAction.Id,
+                string.Empty,
+                CancellationToken.None));
+
+        Assert.Equal(PendingActionStatus.Executing, pendingAction.Status);
+        Assert.Equal(0, repository.SaveChangesCallCount);
+    }
+
     private static CreateOrReplacePendingActionRequest CreateRequest(
         string conversationId = "conversation-1",
         PendingActionType type = PendingActionType.Price,

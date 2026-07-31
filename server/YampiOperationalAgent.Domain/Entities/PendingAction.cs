@@ -68,6 +68,38 @@ public sealed class PendingAction
         UpdatedAtUtc = now;
     }
 
+    public void BeginExecution(DateTimeOffset now)
+    {
+        EnsureStatusTransition(PendingActionStatus.Confirmed, "begin execution");
+
+        Status = PendingActionStatus.Executing;
+        UpdatedAtUtc = now;
+    }
+
+    public void MarkAsExecuted(DateTimeOffset now)
+    {
+        EnsureStatusTransition(PendingActionStatus.Executing, "be marked as executed");
+
+        Status = PendingActionStatus.Executed;
+        ExecutedAtUtc = now;
+        FailureMessage = null;
+        UpdatedAtUtc = now;
+    }
+
+    public void MarkExecutionFailed(string failureMessage, DateTimeOffset now)
+    {
+        EnsureStatusTransition(PendingActionStatus.Executing, "be marked as failed");
+
+        if (string.IsNullOrWhiteSpace(failureMessage))
+        {
+            throw new ArgumentException("Failure message is required.", nameof(failureMessage));
+        }
+
+        Status = PendingActionStatus.ExecutionFailed;
+        FailureMessage = TruncateFailureMessage(failureMessage.Trim());
+        UpdatedAtUtc = now;
+    }
+
     private void EnsurePendingConfirmationTransition(string targetState)
     {
         if (Status != PendingActionStatus.PendingConfirmation)
@@ -76,4 +108,18 @@ public sealed class PendingAction
                 $"Pending action cannot be {targetState} when status is '{Status}'.");
         }
     }
+
+    private void EnsureStatusTransition(PendingActionStatus expectedStatus, string targetState)
+    {
+        if (Status != expectedStatus)
+        {
+            throw new InvalidOperationException(
+                $"Pending action cannot {targetState} when status is '{Status}'.");
+        }
+    }
+
+    private static string TruncateFailureMessage(string failureMessage)
+        => failureMessage.Length <= 1000
+            ? failureMessage
+            : failureMessage[..1000];
 }

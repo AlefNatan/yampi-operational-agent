@@ -18,4 +18,20 @@ public interface IPendingActionService
         string conversationId,
         Guid pendingActionId,
         CancellationToken cancellationToken);
+
+    Task<PendingAction> BeginExecutionAsync(
+        string conversationId,
+        Guid pendingActionId,
+        CancellationToken cancellationToken);
+
+    Task<PendingAction> CompleteExecutionAsync(
+        string conversationId,
+        Guid pendingActionId,
+        CancellationToken cancellationToken);
+
+    Task<PendingAction> FailExecutionAsync(
+        string conversationId,
+        Guid pendingActionId,
+        string failureMessage,
+        CancellationToken cancellationToken);
 }

@@ -88,6 +88,56 @@ public sealed class PendingActionService(
         return pendingAction;
     }
 
+    public async Task<PendingAction> BeginExecutionAsync(
+        string conversationId,
+        Guid pendingActionId,
+        CancellationToken cancellationToken)
+    {
+        var pendingAction = await GetByConversationAndIdAsync(
+            conversationId,
+            pendingActionId,
+            cancellationToken);
+
+        TryApplyTransition(() => pendingAction.BeginExecution(timeProvider.GetUtcNow()));
+        await repository.SaveChangesAsync(cancellationToken);
+
+        return pendingAction;
+    }
+
+    public async Task<PendingAction> CompleteExecutionAsync(
+        string conversationId,
+        Guid pendingActionId,
+        CancellationToken cancellationToken)
+    {
+        var pendingAction = await GetByConversationAndIdAsync(
+            conversationId,
+            pendingActionId,
+            cancellationToken);
+
+        TryApplyTransition(() => pendingAction.MarkAsExecuted(timeProvider.GetUtcNow()));
+        await repository.SaveChangesAsync(cancellationToken);
+
+        return pendingAction;
+    }
+
+    public async Task<PendingAction> FailExecutionAsync(
+        string conversationId,
+        Guid pendingActionId,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        var pendingAction = await GetByConversationAndIdAsync(
+            conversationId,
+            pendingActionId,
+            cancellationToken);
+
+        TryApplyArgumentTransition(
+            () => pendingAction.MarkExecutionFailed(failureMessage, timeProvider.GetUtcNow()));
+        await repository.SaveChangesAsync(cancellationToken);
+
+        return pendingAction;
+    }
+
     private async Task<PendingAction> GetByConversationAndIdAsync(
         string conversationId,
         Guid pendingActionId,
@@ -164,6 +214,22 @@ public sealed class PendingActionService(
         catch (InvalidOperationException exception)
         {
             throw new PendingActionInvalidTransitionException(exception.Message);
+        }
+    }
+
+    private static void TryApplyArgumentTransition(Action transition)
+    {
+        try
+        {
+            transition();
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new PendingActionInvalidTransitionException(exception.Message);
+        }
+        catch (ArgumentException)
+        {
+            throw;
         }
     }
 }
